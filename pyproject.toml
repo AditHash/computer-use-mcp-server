@@ -1,0 +1,9 @@
+[project]
+name = "computer-use-mcp-server"
+version = "0.1.0"
+description = "A Windows computer-use MCP server, built one tool at a time."
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "mcp>=2,<3",
+]
