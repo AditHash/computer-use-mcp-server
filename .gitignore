@@ -9,3 +9,9 @@ wheels/
 # Virtual environments
 .venv
 .uv-cache/
+
+# Local screenshots can contain private content.
+screenshots/
+
+# Runtime server logs.
+logs/
