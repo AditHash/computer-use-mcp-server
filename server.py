@@ -8,8 +8,9 @@ from src.logging_config import configure_logging
 from src.tools.desktop import get_mouse_position, get_screen_size
 from src.tools.monitors import list_monitors
 from src.tools.screenshot import take_screenshot
+from src.tools.status import computer_get_status
 
-__all__ = ["get_mouse_position", "get_screen_size", "list_monitors", "take_screenshot", "mcp"]
+__all__ = ['get_mouse_position', 'get_screen_size', 'list_monitors', 'take_screenshot', 'mcp', 'computer_get_status']
 
 logger = logging.getLogger("computer_use.server")
 
@@ -20,6 +21,7 @@ mcp.tool()(get_screen_size)
 mcp.tool()(get_mouse_position)
 mcp.tool()(list_monitors)
 mcp.tool()(take_screenshot)
+mcp.tool()(computer_get_status)
 
 
 def main() -> None:
