@@ -1,6 +1,36 @@
 # Proposed MCP Tool Contracts (v0.1)
 
-These are **design contracts**, not implemented tools. Codex should translate them into typed Pydantic request/response objects and tests before implementation. Keep the public surface small and avoid leaking raw operating-system handles.
+The target-scoped v0.1 API below remains a **design contract**. The current
+learning prototype implements the smaller tools described here first.
+
+## Implemented learning tools
+
+| Tool | Inputs | Response | Permission |
+| --- | --- | --- | --- |
+| get_screen_size | none | width, height in Windows desktop coordinates | read-only metrics |
+| get_mouse_position | none | x, y in Windows desktop coordinates | read-only metrics |
+| list_monitors | none | list of index, left, top, width, height, is_primary in physical pixels | read-only metrics; no screenshot grant needed |
+| take_screenshot | none | MCP image content, MIME image/png, no structured output | local COMPUTER_USE_ALLOW_SCREENSHOTS=1 |
+
+`take_screenshot` captures the entire primary display in physical pixels. It
+accepts no file path, crop, target ID, or permission parameter. Permission is
+checked before opening MSS, on every call. It is disabled by default. It
+returns a tool error containing PERMISSION_DENIED, UNSUPPORTED,
+OUT_OF_BOUNDS, or BACKEND_UNAVAILABLE when appropriate. Maximum size is
+16 million pixels and 10 MiB of PNG bytes. The capture object is created and
+closed within one call; image data stays out of application logs and files.
+
+`list_monitors` reads display metadata only and never calls the capture API.
+It excludes MSS's combined-desktop entry, supports negative monitor origins,
+and reports a primary display. Its indices describe the current enumeration;
+they are not stable target IDs. Its MCP structured output wraps the list in
+`result`. Backend failure returns BACKEND_UNAVAILABLE, and other operating
+systems return UNSUPPORTED.
+
+These tools issue no element refs, so stale-ref checks do not apply. This
+prototype does not implement the planned target registry or per-window
+authorization; enabling screenshots authorizes the whole primary display for
+that server process. It is separate from the planned `computer_screenshot` API.
 
 ## Common types
 
