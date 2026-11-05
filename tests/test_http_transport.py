@@ -65,6 +65,8 @@ class HTTPTransportTests(unittest.TestCase):
                 )
                 self.assertEqual(demo.returncode, 0, demo.stderr)
                 self.assertIn("computer_get_status: {'status': 'ready'", demo.stdout)
+                self.assertIn("get_computer_info: {'os_name':", demo.stdout)
+                self.assertIn("get_computer_resources: {'cpu_percent':", demo.stdout)
                 self.assertIn("'screenshots': False", demo.stdout)
                 self.assertNotIn('computer_use.server', demo.stderr)
                 self.assertIsNone(process.poll(), 'Client exit must not stop the server')

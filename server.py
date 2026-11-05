@@ -10,8 +10,9 @@ from src.tools.desktop import get_mouse_position, get_screen_size
 from src.tools.monitors import list_monitors
 from src.tools.screenshot import take_screenshot
 from src.tools.status import computer_get_status
+from src.tools.system import get_computer_info, get_computer_resources
 
-__all__ = ['get_mouse_position', 'get_screen_size', 'list_monitors', 'take_screenshot', 'mcp', 'computer_get_status']
+__all__ = ['get_mouse_position', 'get_screen_size', 'list_monitors', 'take_screenshot', 'mcp', 'computer_get_status', 'get_computer_info', 'get_computer_resources']
 
 logger = logging.getLogger("computer_use.server")
 
@@ -23,6 +24,8 @@ mcp.tool()(get_mouse_position)
 mcp.tool()(list_monitors)
 mcp.tool()(take_screenshot)
 mcp.tool()(computer_get_status)
+mcp.tool()(get_computer_info)
+mcp.tool()(get_computer_resources)
 
 
 def main(http: bool = False, port: int = 8000) -> None:
