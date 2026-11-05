@@ -1,5 +1,6 @@
 """Entry point for the local computer-use MCP server."""
 
+import argparse
 import logging
 
 from mcp.server import MCPServer
@@ -24,12 +25,16 @@ mcp.tool()(take_screenshot)
 mcp.tool()(computer_get_status)
 
 
-def main() -> None:
-    """Start the MCP server over standard input/output."""
+def main(http: bool = False, port: int = 8000) -> None:
+    """Start stdio by default, or an explicitly enabled loopback HTTP server."""
     configure_logging()
-    logger.info("Starting computer-use MCP server over stdio")
     try:
-        mcp.run(transport="stdio")
+        if http:
+            logger.info("Starting computer-use MCP server at http://127.0.0.1:%d/mcp", port)
+            mcp.run(transport="streamable-http", host="127.0.0.1", port=port)
+        else:
+            logger.info("Starting computer-use MCP server over stdio")
+            mcp.run(transport="stdio")
     except KeyboardInterrupt:
         logger.info("Server interrupted by operator")
     finally:
@@ -37,4 +42,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Run the local computer-use MCP server.")
+    parser.add_argument("--http", action="store_true", help="Listen on 127.0.0.1:8000 for the demo client.")
+    args = parser.parse_args()
+    main(http=args.http)
