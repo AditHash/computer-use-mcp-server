@@ -3,6 +3,11 @@
 The target-scoped v0.1 API below remains a **design contract**. The current
 learning prototype implements the smaller tools described here first.
 
+The same tool contracts are available over default stdio and opt-in loopback
+HTTP (`server.py --http`). The demo client uses HTTP to connect to the server
+started in another terminal. Permission flags always belong to the server's
+environment, independently of how the client was started.
+
 ## Implemented learning tools
 
 | Tool | Inputs | Response | Permission |
@@ -11,6 +16,11 @@ learning prototype implements the smaller tools described here first.
 | get_mouse_position | none | x, y in Windows desktop coordinates | read-only metrics |
 | list_monitors | none | list of index, left, top, width, height, is_primary in physical pixels | read-only metrics; no screenshot grant needed |
 | take_screenshot | none | MCP image content, MIME image/png, no structured output | local COMPUTER_USE_ALLOW_SCREENSHOTS=1 |
+| computer_get_status | none | status, desktop_supported, available_tools, permissions | safe read-only status; no desktop grant required |
+| get_computer_info | none | os_name, os_release, os_version, architecture, cpu_model, cpu_logical_cores, cpu_physical_cores | read-only system facts |
+| get_computer_resources | none | cpu_percent, memory, system_disk | read-only system metrics |
+| computer_list_targets | optional kind=desktop/browser | list of target_id, name, kind; currently desktop only | local COMPUTER_USE_ALLOWED_APPS executable allowlist |
+| get_active_window | none | result containing target_id, name, kind or null | same local application discovery allowlist |
 
 `take_screenshot` captures the entire primary display in physical pixels. It
 accepts no file path, crop, target ID, or permission parameter. Permission is
@@ -27,10 +37,69 @@ they are not stable target IDs. Its MCP structured output wraps the list in
 `result`. Backend failure returns BACKEND_UNAVAILABLE, and other operating
 systems return UNSUPPORTED.
 
-These tools issue no element refs, so stale-ref checks do not apply. This
-prototype does not implement the planned target registry or per-window
-authorization; enabling screenshots authorizes the whole primary display for
-that server process. It is separate from the planned `computer_screenshot` API.
+`computer_get_status` returns `status=ready` when the server can respond; it does
+not test desktop access or invoke capture APIs. `desktop_supported` indicates
+Windows support. `available_tools` is read from the active MCP server registry.
+`permissions.screenshots` reflects whether the same local flag used by the
+screenshot tool is exactly `1`; it reports configuration, not backend readiness.
+`permissions.interaction` remains false. Status itself requires no desktop grant
+and remains callable on unsupported platforms. No hostname, username, paths,
+environment dump, image data, or operating-system handles are returned. The SDK
+injects the handler's context; it is not a client-supplied argument.
+
+`get_computer_info` returns OS and CPU facts; unknown CPU model/core counts are
+null. `get_computer_resources` samples aggregate CPU usage for 0.1 seconds and
+reports `memory` (total_bytes, available_bytes, used_bytes, percent) and
+`system_disk` (total_bytes, used_bytes, free_bytes, percent). Only the system
+disk is measured (SystemDrive on Windows, `/` elsewhere); no path is returned.
+Percentages range from 0 to 100. Memory counters retain psutil's platform
+semantics; `available_bytes` represents memory available to applications.
+The synchronous resource handler runs on the SDK worker thread, so its short
+sampling interval does not block the MCP event loop.
+
+Both system tools require no screenshot or interaction grant and accept no
+client arguments. They expose no hostname, username, IP/MAC address, serial,
+process list, or file contents. Backend failures return BACKEND_UNAVAILABLE
+without internal error details. Neither tool performs a write or issues refs.
+
+`computer_list_targets` supports omitted kind or desktop. Browser kind returns
+UNSUPPORTED until a managed browser backend exists. With no local allowlist it
+returns an empty list without enumerating windows. The allowlist is a JSON
+array of at most 32 absolute Windows `.exe` paths in COMPUTER_USE_ALLOWED_APPS;
+comparisons normalize case and separators. Malformed policy fails closed with
+INVALID_ARGUMENT; unsupported desktop backends return UNSUPPORTED, and native
+enumeration failure returns BACKEND_UNAVAILABLE.
+
+Window titles are read only after executable permission checks. The registry
+then checks permission again before returning up to 100 targets with names
+limited to 200 characters. IDs are random, server-owned, and expire after 60
+seconds without rediscovery. Discovery identity includes the internal handle,
+PID, process start time, executable, and window class. Those details are never
+returned. Observed closed/revoked/replaced entries are removed. Listing is not
+an authorization capability for actions. Same-process window-handle reuse
+between scans remains a limitation requiring future accessibility validation.
+
+For easier operator setup, `server.py --allow-app notepad` resolves a running
+app name to a single exact executable path and adds that path to the existing
+server-local allowlist. Repeated flags are supported. Missing/ambiguous matches
+fail before the server listens; full paths undergo the same policy validation.
+No partially resolved selection is applied. CLI selection is not an MCP tool
+and does not grant screenshots or interaction.
+
+`get_active_window` reads the foreground handle internally, refreshes allowed
+target discovery, and verifies unchanged focus and policy before returning the
+matching opaque target. Null is a successful result for an unapproved window,
+missing foreground window, focus change, or empty policy. The structured result
+is `{result: target-or-null}`. No raw handle, PID, or executable path is returned.
+Expired registry entries cannot be matched. This has the same discovery-only
+identity limitations as target listing and does not authorize any action.
+
+No current tool issues element refs, so element stale-ref checks do not yet
+apply. Target identity expiry/replacement and permission revocation are tested.
+The prototype has a discovery registry, but target-specific observation and
+action authorization are not implemented. Enabling the existing screenshot
+tool still authorizes the whole primary display for that server process; it is
+separate from both this allowlist and the planned `computer_screenshot` API.
 
 ## Common types
 
@@ -116,5 +185,12 @@ Do not include full traces or sensitive OS paths in tool responses; send redacte
 - Never claim action success from the absence of an exception; verify observable state when feasible, otherwise report EXECUTED_UNVERIFIED.
 
 ## Versioning
+
+### Additional planned primitives
+
+The README reference review adds planned element-bound double-click and drag,
+plus a bounded wait tool. They are not registered or implemented yet. Screenshot
+downscaling will require explicit source/image dimensions and coordinate
+mapping, with freshness and target checks before any physical-input fallback.
 
 Stabilize schemas before the first PyPI release. Any breaking tool-name or response change requires contract tests, README updates, and a documented release note.
