@@ -109,6 +109,7 @@ dependencies = [
     { name = "mcp" },
     { name = "mss" },
     { name = "psutil" },
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
 ]
 
 [package.metadata]
@@ -116,6 +117,7 @@ requires-dist = [
     { name = "mcp", specifier = ">=2,<3" },
     { name = "mss", specifier = ">=10.2.0" },
     { name = "psutil", specifier = ">=7.2.2" },
+    { name = "pywin32", marker = "sys_platform == 'win32'", specifier = ">=312" },
 ]
 
 [[package]]
