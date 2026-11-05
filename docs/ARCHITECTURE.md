@@ -4,6 +4,11 @@
 
 Build one **local stdio MCP process** that exposes a common computer-use API while delegating operating-system and browser specifics to isolated adapters. v0.1 targets Windows 10/11 interactive sessions and an **isolated Playwright Chromium profile**. This is not a remote desktop service.
 
+The learning demo additionally supports explicit `server.py --http` startup,
+using Streamable HTTP on `127.0.0.1:8000/mcp`. The demo client connects to this
+existing process. It neither creates nor owns the server. Plain server startup
+preserves stdio for MCP harnesses. Logs stay with the process that emits them.
+
 ## Components
 
 ~~~text

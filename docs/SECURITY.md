@@ -14,12 +14,21 @@ Untrusted inputs include webpage text, accessibility labels, window titles, tool
 4. **No broad system powers:** no shell execution, filesystem writes, arbitrary URL requests, process injection, elevated privileges, or secure-desktop interaction exposed as tools.
 5. **Protected workflows:** deny credential/password fields, secrets, payment details, purchases, transfers, deletions, external submissions, browser security settings, and administrative dialogs by default. If the system cannot classify an action reliably, reject it.
 6. **Isolated browser:** launch dedicated non-personal Playwright context/profile. Never attach to the user's personal authenticated browser by default. Do not share existing cookie stores.
-7. **No remote listener:** v0.1 is local stdio only. Do not expose it on a public HTTP address.
+7. **No remote listener:** stdio remains the default and opens no port. The explicitly requested `server.py --http` demo binds only to `127.0.0.1:8000`; do not expose it on a public HTTP address.
 8. **Least disclosure:** limit depth/size of observations, redact likely sensitive controls, and avoid storing screen images or typed data in logs.
 9. **Fail closed:** closed window, stale ref, changed PID, redirect outside allowlist, policy reload, timeout, UIA error, or missing approval all fail safely.
 10. **Kill switch:** support immediate local shutdown/cancellation and honor PyAutoGUI's safety behavior; do not disable safety protections for convenience.
 
 ## Safe action policy
+
+### Local HTTP demo
+
+The loopback HTTP mode lets a separately started client connect while server
+logs remain in the server's terminal. It is an opt-in local development mode,
+not a remote service. It has no client authentication: other local processes
+can reach the endpoint. Screenshot permission still defaults to disabled and
+is read only from the server process environment. Client environment settings
+cannot grant server permissions. Input actions remain unimplemented/disabled.
 
 Propose a local file (for example a TOML config under the user's app-config directory) loaded by the process, **not editable through MCP tools**. Document exact schema when implemented. Permissions should be narrow: target/application identity, allowed browser origins, capabilities inspect/screenshot/interact/navigate, optional fallback enablement, and bounded limits.
 
@@ -34,6 +43,9 @@ Do not infer consent from an LLM saying "the user approved". Real authorization 
 - Keep network interactions limited to approved browser origins, subject to any operational limitations documented after testing.
 
 ## Windows constraints
+
+- Target discovery defaults to an empty application allowlist. COMPUTER_USE_ALLOWED_APPS is a server-local JSON array of absolute executable paths, not model-editable tool input. Only titles from those executables are read or returned. Discovery checks process creation time to detect PID reuse, issues expiring opaque IDs, and exposes no raw handles/PIDs/paths. This does not yet authorize observation or input; those operations still need fresh identity and permission checks, including same-process handle-reuse defenses.
+- The local `--allow-app` startup option resolves an app name to one running executable path; ambiguous or missing names fail closed. This is an operator action outside MCP. The resulting policy remains exact-path based, and no tool can add applications to it. Active-window information is disclosed only for allowed targets and does not bring any application to the foreground.
 
 - Respect User Interface Privilege Isolation, OS integrity boundaries, and the secure desktop. No UAC bypass.
 - Restrict to the interactive operator's approved window identities; verify process and foreground state before physical-input fallback.

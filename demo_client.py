@@ -4,41 +4,31 @@ import argparse
 import asyncio
 import base64
 import logging
-import os
-import sys
 from pathlib import Path
 
 from mcp import Client
-from mcp.client.stdio import StdioServerParameters
 
 from src.logging_config import configure_logging
-from src.stdio_transport import logged_stdio
 
 logger = logging.getLogger("computer_use.client")
 
 
-async def main(include_screenshot: bool = False) -> None:
-    """Call the desktop tools, optionally requesting and saving a screenshot."""
+async def main(
+    include_screenshot: bool = False,
+    server_url: str = "http://127.0.0.1:8000/mcp",
+) -> None:
+    """Connect to the running server without starting or stopping its process."""
     configure_logging()
-    server_path = Path(__file__).resolve().with_name("server.py")
-    server = StdioServerParameters(
-        command=sys.executable,
-        args=[str(server_path)],
-        # MCP subprocesses do not inherit every custom environment variable.
-        env={
-            "COMPUTER_USE_ALLOW_SCREENSHOTS": os.environ.get("COMPUTER_USE_ALLOW_SCREENSHOTS", "0"),
-            "PYTHONIOENCODING": "utf-8",
-        },
-    )
-
-    # The client owns the server subprocess and closes it when this block ends.
-    logger.info("Connecting to the local MCP server")
-    async with Client(logged_stdio(server), read_timeout_seconds=15) as client:
+    logger.info("Connecting to the running local MCP server")
+    async with Client(server_url, read_timeout_seconds=15) as client:
         tools = await client.list_tools()
         logger.info("Discovered %d tools", len(tools.tools))
         print("Available tools:", [tool.name for tool in tools.tools])
 
-        tool_names = ["get_screen_size", "get_mouse_position", "list_monitors"]
+        tool_names = [
+            "computer_get_status", "get_computer_info", "get_computer_resources",
+            "get_screen_size", "get_mouse_position", "list_monitors", "computer_list_targets", "get_active_window",
+        ]
         if include_screenshot:
             tool_names.append("take_screenshot")
 
@@ -67,7 +57,13 @@ async def main(include_screenshot: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Try the local computer-use MCP tools.")
+    parser = argparse.ArgumentParser(description="Connect to server.py --http and try the MCP tools.")
     parser.add_argument("--screenshot", action="store_true", help="Request and save an opt-in screenshot.")
     args = parser.parse_args()
-    asyncio.run(main(include_screenshot=args.screenshot))
+    try:
+        asyncio.run(main(include_screenshot=args.screenshot))
+    except KeyboardInterrupt:
+        logger.info("Demo client interrupted")
+    except Exception:
+        logger.error("Demo failed. Start 'uv run server.py --http' in another terminal and check its logs.")
+        raise SystemExit(1) from None
