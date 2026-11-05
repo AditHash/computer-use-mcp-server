@@ -5,6 +5,7 @@ import ntpath
 import os
 from pathlib import PureWindowsPath
 
+import psutil
 from mcp.server.mcpserver.exceptions import ToolError
 
 
@@ -43,3 +44,37 @@ def _validated_paths(paths: object) -> frozenset[str]:
             "INVALID_ARGUMENT: COMPUTER_USE_ALLOWED_APPS must be a JSON array "
             "of up to 32 absolute Windows executable paths; wildcards are not allowed."
         ) from None
+
+
+def configure_allowed_applications(apps: list[str]) -> None:
+    """Resolve trusted CLI app selections into the existing exact-path policy.
+
+    This startup helper is not an MCP tool. Multiple running executable paths
+    for one app name are ambiguous and never silently selected.
+    """
+    resolved = set(allowed_applications())
+    if len(apps) > 32:
+        raise ToolError("INVALID_ARGUMENT: At most 32 app selections are allowed.")
+    for app in apps:
+        if PureWindowsPath(app).is_absolute():
+            resolved.update(_validated_paths([app]))
+            continue
+        if not app or ntpath.basename(app) != app or any(char in app for char in '*?\x00:/\\'):
+            raise ToolError("INVALID_ARGUMENT: Use a running app name or an absolute executable path.")
+        name = app.casefold() if app.casefold().endswith('.exe') else app.casefold() + '.exe'
+        try:
+            matches = {
+                normalize_executable(process.info['exe'])
+                for process in psutil.process_iter(['name', 'exe'])
+                if (process.info.get('name') or '').casefold() == name and process.info.get('exe')
+            }
+        except (psutil.Error, OSError):
+            raise ToolError("BACKEND_UNAVAILABLE: Running applications could not be resolved.") from None
+        if not matches:
+            raise ToolError("INVALID_ARGUMENT: That app is not running. Open it first, then restart the server.")
+        if len(matches) > 1:
+            raise ToolError("INVALID_ARGUMENT: App name is ambiguous; specify its full executable path.")
+        resolved.update(matches)
+    validated = _validated_paths(sorted(resolved))
+    # Change policy only after all selections resolve and validate successfully.
+    os.environ['COMPUTER_USE_ALLOWED_APPS'] = json.dumps(sorted(validated))

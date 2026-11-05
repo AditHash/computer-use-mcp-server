@@ -7,7 +7,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from src.backends.windows import (
     BackendUnavailableError, UnsupportedPlatformError,
-    discover_windows,
+    discover_windows, foreground_window_handle,
 )
 from src.core.policy import allowed_applications
 from src.core.targets import TargetInfo, TargetRegistry
@@ -46,4 +46,34 @@ def computer_list_targets(kind: Literal["desktop", "browser"] | None = None) -> 
         raise
 
     logger.info("Discovered %d allowed desktop targets", len(result))
+    return result
+
+
+def get_active_window() -> TargetInfo | None:
+    """Return the active allowed target, or null when it cannot be disclosed.
+
+    Reads metadata only. A window outside the local application allowlist is
+    never identified. Focus changes during the query return null.
+    """
+    logger.info("Reading the active allowed window")
+    allowed = allowed_applications()
+    if not allowed:
+        logger.info("No active window disclosed: no applications allowed")
+        return None
+    try:
+        before = foreground_window_handle()
+        if not before:
+            return None
+        listed = computer_list_targets(kind="desktop")
+        if before != foreground_window_handle() or allowed_applications() != allowed:
+            logger.info("Active window changed during discovery")
+            return None
+        target_id = registry.target_id_for_handle(before)
+        result = next((target for target in listed if target['target_id'] == target_id), None)
+    except UnsupportedPlatformError:
+        raise ToolError("UNSUPPORTED: Active-window discovery currently supports Windows only.") from None
+    except BackendUnavailableError:
+        logger.error("Active-window discovery failed")
+        raise ToolError("BACKEND_UNAVAILABLE: Windows could not identify the active window.") from None
+    logger.info("Active-window query completed")
     return result

@@ -61,3 +61,11 @@ class TargetRegistry:
                 result.append({"target_id": target_id, "name": window.title[:200], "kind": "desktop"})
             self._entries = current
             return result
+
+    def target_id_for_handle(self, handle: int) -> str | None:
+        """Match a foreground handle against the freshly discovered registry."""
+        with self._lock:
+            now = self._clock()
+            matches = [target_id for identity, (target_id, expires) in self._entries.items()
+                       if identity[0] == handle and expires > now]
+            return matches[0] if len(matches) == 1 else None

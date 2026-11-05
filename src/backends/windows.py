@@ -16,6 +16,19 @@ class BackendUnavailableError(Exception):
     pass
 
 
+def foreground_window_handle() -> int:
+    """Read the foreground handle for internal matching; never expose it to MCP."""
+    if sys.platform != "win32":
+        raise UnsupportedPlatformError
+    try:
+        import pywintypes
+        import win32gui
+    except ImportError:
+        raise BackendUnavailableError from None
+    try:
+        return win32gui.GetForegroundWindow() or 0
+    except (pywintypes.error, OSError):
+        raise BackendUnavailableError from None
 
 
 def discover_windows(allowed: frozenset[str]) -> list[WindowRecord]:

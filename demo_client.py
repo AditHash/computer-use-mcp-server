@@ -25,7 +25,10 @@ async def main(
         logger.info("Discovered %d tools", len(tools.tools))
         print("Available tools:", [tool.name for tool in tools.tools])
 
-        tool_names = ['computer_get_status', 'get_computer_info', 'get_computer_resources', 'get_screen_size', 'get_mouse_position', 'list_monitors', 'computer_list_targets']
+        tool_names = [
+            "computer_get_status", "get_computer_info", "get_computer_resources",
+            "get_screen_size", "get_mouse_position", "list_monitors", "computer_list_targets", "get_active_window",
+        ]
         if include_screenshot:
             tool_names.append("take_screenshot")
 

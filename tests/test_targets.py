@@ -12,7 +12,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from server import mcp
 from src.backends import windows as windows_backend
-from src.core.policy import allowed_applications, normalize_executable
+from src.core.policy import allowed_applications, configure_allowed_applications, normalize_executable
 from src.core.targets import TargetRegistry, WindowRecord
 from src.tools import targets
 
@@ -35,9 +35,30 @@ class PolicyTests(unittest.TestCase):
                 with self.assertRaisesRegex(ToolError, 'INVALID_ARGUMENT'):
                     allowed_applications()
 
+    def test_startup_resolves_a_running_app_to_an_exact_path(self):
+        process = SimpleNamespace(info={'name': 'Notepad.exe', 'exe': APP})
+        with patch.dict(os.environ, {}, clear=True), patch('src.core.policy.psutil.process_iter', return_value=[process]):
+            configure_allowed_applications(['notepad'])
+            self.assertEqual(allowed_applications(), ALLOWED)
 
+    def test_ambiguous_running_app_names_do_not_change_policy(self):
+        processes = [SimpleNamespace(info={'name': 'notepad.exe', 'exe': path})
+                     for path in (APP, r'C:\Other\notepad.exe')]
+        with patch.dict(os.environ, {}, clear=True), patch('src.core.policy.psutil.process_iter', return_value=processes):
+            with self.assertRaisesRegex(ToolError, 'ambiguous'):
+                configure_allowed_applications(['notepad'])
+            self.assertEqual(allowed_applications(), frozenset())
 
+    def test_missing_app_does_not_change_policy(self):
+        with patch.dict(os.environ, {}, clear=True), patch('src.core.policy.psutil.process_iter', return_value=[]):
+            with self.assertRaisesRegex(ToolError, 'running'):
+                configure_allowed_applications(['notepad'])
+            self.assertEqual(allowed_applications(), frozenset())
 
+    def test_explicit_paths_still_pass_through_policy_validation(self):
+        with patch.dict(os.environ, {}, clear=True):
+            configure_allowed_applications([APP])
+            self.assertEqual(allowed_applications(), ALLOWED)
 
 
 class RegistryTests(unittest.TestCase):
@@ -76,6 +97,13 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(len(result), 100)
         self.assertTrue(all(len(target['name']) == 200 for target in result))
 
+    def test_foreground_lookup_does_not_return_expired_ids(self):
+        now = [0.0]
+        registry = TargetRegistry(clock=lambda: now[0])
+        target = registry.refresh([WINDOW], ALLOWED)[0]
+        self.assertEqual(registry.target_id_for_handle(WINDOW.handle), target['target_id'])
+        now[0] = 61.0
+        self.assertIsNone(registry.target_id_for_handle(WINDOW.handle))
 
 
 class DiscoveryTests(unittest.TestCase):
@@ -92,11 +120,29 @@ class DiscoveryTests(unittest.TestCase):
         with patch.object(targets, 'allowed_applications', side_effect=[ALLOWED, frozenset()]), patch.object(targets, 'discover_windows', return_value=[WINDOW]):
             self.assertEqual(targets.computer_list_targets(), [])
 
+    def test_active_window_without_permission_does_not_query_foreground(self):
+        with patch.dict(os.environ, {}, clear=True), patch.object(targets, 'foreground_window_handle') as foreground:
+            self.assertIsNone(targets.get_active_window())
+        foreground.assert_not_called()
 
+    def test_active_window_reuses_the_discovery_target_id(self):
+        with patch.dict(os.environ, {'COMPUTER_USE_ALLOWED_APPS': json.dumps([APP])}), patch.object(targets, 'discover_windows', return_value=[WINDOW]), patch.object(targets, 'foreground_window_handle', return_value=WINDOW.handle):
+            listed = targets.computer_list_targets()[0]
+            self.assertEqual(targets.get_active_window(), listed)
 
+    def test_active_window_not_allowed_or_focus_changed_returns_none(self):
+        for handles in ((999, 999), (WINDOW.handle, 999)):
+            with self.subTest(handles=handles), patch.dict(os.environ, {'COMPUTER_USE_ALLOWED_APPS': json.dumps([APP])}), patch.object(targets, 'discover_windows', return_value=[WINDOW]), patch.object(targets, 'foreground_window_handle', side_effect=handles):
+                self.assertIsNone(targets.get_active_window())
 
 
 class TargetsMCPTests(unittest.IsolatedAsyncioTestCase):
+    async def test_active_window_without_permission_is_a_successful_null_result(self):
+        with patch.dict(os.environ, {}, clear=True):
+            async with Client(mcp) as client:
+                result = await client.call_tool('get_active_window', {})
+        self.assertFalse(result.is_error)
+        self.assertEqual(result.structured_content, {'result': None})
 
     async def test_allowed_windows_are_returned_without_internal_identity(self):
         with patch.dict(os.environ, {'COMPUTER_USE_ALLOWED_APPS': json.dumps([APP])}), patch.object(targets, 'discover_windows', return_value=[WINDOW]):

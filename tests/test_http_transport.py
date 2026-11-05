@@ -17,6 +17,10 @@ import server
 
 
 class StartupTests(unittest.TestCase):
+    def test_app_selection_is_resolved_at_server_startup(self):
+        with patch.object(server, 'configure_logging'), patch.object(server, 'configure_allowed_applications') as configure, patch.object(server.mcp, 'run'):
+            server.main(http=True, allow_apps=['notepad'])
+        configure.assert_called_once_with(['notepad'])
 
     def test_default_startup_preserves_stdio(self):
         with patch.object(server, 'configure_logging'), patch.object(server.mcp, 'run') as run:
@@ -68,6 +72,7 @@ class HTTPTransportTests(unittest.TestCase):
                 self.assertIn("get_computer_info: {'os_name':", demo.stdout)
                 self.assertIn("get_computer_resources: {'cpu_percent':", demo.stdout)
                 self.assertIn("computer_list_targets: {'result': []}", demo.stdout)
+                self.assertIn("get_active_window: {'result': None}", demo.stdout)
                 self.assertIn("'screenshots': False", demo.stdout)
                 self.assertNotIn('computer_use.server', demo.stderr)
                 self.assertIsNone(process.poll(), 'Client exit must not stop the server')
