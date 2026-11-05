@@ -55,6 +55,21 @@ mapping. Resizing screenshots must not silently change how input coordinates
 are interpreted. Headless desktops, recording, installers, and cross-platform
 input are possible later projects, outside the current Windows v0.1 scope.
 
+### Planned features from the reference review
+
+None of these features is implemented yet. Each one adapts an idea from the
+[reference projects](#reference-projects) to this project's security contract.
+
+| Feature | Used by | Requirements |
+| --- | --- | --- |
+| Screenshot coordinate map | `computer_screenshot()`, `move_mouse()`, `computer_drag()` | Report image size, physical size, and scale factor. Bind each map to one target and snapshot, with an expiry. Reject image coordinates when no fresh map exists. |
+| Per-window capture with PrintWindow | `computer_screenshot()` | Accept only an opaque `target_id`, never a window handle. Document this addition to the MSS capture stack. |
+| Focus protection | All physical-input fallback | Deny input that would disrupt focus by default. Only local operator policy can allow it; no tool argument can. |
+| Emergency-stop banner | All interaction tools | Show a local, topmost control while automation is active. Stop the active action and block further actions when used. |
+| Audit log | All interaction tools | Write one JSON line per action to stderr. Include only action type, target alias, decision, result, and time. Never include typed text, page content, or images. |
+| Legacy control fallback | `computer_observe()` | Enumerate child controls with Win32 only when UIA cannot read them. Return them through normal element refs, without exposing window handles. |
+| Action guidance in tool descriptions | All interaction tools | Steer agents towards element-bound actions, using coordinates only as a last resort. |
+
 ### Supporting functions we also need
 
 These are internal Python helpers, not extra tools the agent can call directly.
