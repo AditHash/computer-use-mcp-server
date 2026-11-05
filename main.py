@@ -1,5 +1,6 @@
 import ctypes
 import sys
+from ctypes import wintypes
 
 from mcp.server import MCPServer
 
@@ -25,6 +26,19 @@ def get_screen_size() -> dict[str, int]:
         raise RuntimeError("Windows could not report the primary screen size.")
 
     return {"width": width, "height": height}
+
+
+@mcp.tool()
+def get_mouse_position() -> dict[str, int]:
+    """Return the mouse cursor's x and y desktop coordinates."""
+    if sys.platform != "win32":
+        raise RuntimeError("get_mouse_position currently supports Windows only.")
+
+    point = wintypes.POINT()
+    if not ctypes.windll.user32.GetCursorPos(ctypes.byref(point)):
+        raise RuntimeError("Windows could not read the cursor position.")
+
+    return {"x": point.x, "y": point.y}
 
 
 if __name__ == "__main__":
