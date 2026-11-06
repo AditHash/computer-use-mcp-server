@@ -1,5 +1,62 @@
 # Testing and Acceptance Matrix
 
+## Recorded checkpoint: 2026-11-06
+
+Environment: Windows 11, project Python 3.14.4, MCP SDK 2.3.0, Playwright 1.64.1.
+
+| Command/check | Actual result |
+| --- | --- |
+| `uv sync --locked` | Passed; project installed with its console command |
+| `uv run computer-use-mcp --help` | Passed |
+| `uv run pytest -q` | 89 passed, 6 skipped, 15 subtests passed; four additional physical guard cases subsequently passed |
+| `ruff check .` | Passed |
+| `uv build` | Wheel and source distribution built locally; nothing published |
+| Clean-environment wheel installation + `tests/test_installed_cli.py` | Passed real stdio discovery of 21 tools; default writes denied; empty target list |
+| Browser/dispatcher acceptance | Real Chromium actions, mapped drag, contenteditable, frames, redirect limits, blocked write requests, popups/downloads, emergency stop and pending-input revocation passed |
+| Opt-in `tests/test_windows_acceptance.py` | 4 passed, 1 failed: pointer movement correctly rejected loss of foreground focus |
+| Isolated native physical-input retry | Skipped because Windows refused initial focus; manual operator focus still needed |
+
+The first four native tests cover disposable-fixture UIA observe/click/type,
+protected controls, nonblank PrintWindow capture, external edit invalidation,
+non-activating stop banner, and cancelled-worker suppression of late effects.
+The fifth verified focus, field navigation keys and list scrolling before losing
+foreground during mapped pointer movement. Native pointer/double-click/drag
+acceptance is therefore **not complete**. Do not reinterpret the safety rejection
+as a passing positive-input test.
+
+Run native tests only in a controlled interactive session:
+
+```powershell
+$env:COMPUTER_USE_RUN_WINDOWS_TESTS='1'
+uv run pytest tests/test_windows_acceptance.py -q -rs
+```
+
+If Windows prevents automatic activation, the optional
+`COMPUTER_USE_WAIT_FOR_FOCUS=1` mode waits for the local operator to focus the
+fixture title bar. Keep the fixture foreground until it closes. Do not force
+focus through OS bypasses. The tests use their own disposable native application;
+Notepad is not required.
+
+Wheel verification after a local build/install in a fresh environment:
+
+```powershell
+uv build
+uv venv .uv-cache/wheel-acceptance --python .venv/Scripts/python.exe
+uv pip install --python .uv-cache/wheel-acceptance/Scripts/python.exe dist/computer_use_mcp_server-0.1.0-py3-none-any.whl
+$env:COMPUTER_USE_INSTALLED_CLI=(Resolve-Path .uv-cache/wheel-acceptance/Scripts/computer-use-mcp.exe).Path
+uv run pytest tests/test_installed_cli.py -q
+```
+
+The acceptance test runs the installed executable with a temporary working
+directory outside the repository. Browser integration uses only local fixture
+pages in an ephemeral managed Chromium context. Mapped drag endpoints, frame
+ownership/ref invalidation, popup/download restrictions, approved/disallowed
+redirects, pending-input stop, policy revocation, cancelled driver startup and
+late screenshot-permission revocation have passing regressions. Remaining work
+includes positive live native pointer input, live mixed-DPI/multi-monitor input
+or an explicit supported-environment limitation, hosted CI execution and the
+final security/readiness audit.
+
 Test behavior and security boundaries, not just tool registration. The server must be testable without a physical desktop by injecting fake adapters; live desktop tests are explicitly opt-in and run on Windows.
 
 ## Automated unit tests (all platforms)

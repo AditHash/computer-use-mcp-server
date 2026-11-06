@@ -28,9 +28,16 @@ logs remain in the server's terminal. It is an opt-in local development mode,
 not a remote service. It has no client authentication: other local processes
 can reach the endpoint. Screenshot permission still defaults to disabled and
 is read only from the server process environment. Client environment settings
-cannot grant server permissions. Input actions remain unimplemented/disabled.
+cannot grant server permissions. Input defaults to disabled and requires a
+trusted operator policy plus exact control grants.
 
-Propose a local file (for example a TOML config under the user's app-config directory) loaded by the process, **not editable through MCP tools**. Document exact schema when implemented. Permissions should be narrow: target/application identity, allowed browser origins, capabilities inspect/screenshot/interact/navigate, optional fallback enablement, and bounded limits.
+The process loads an explicit local TOML policy via `--config`, **not editable
+through MCP tools**. See [OPERATOR_POLICY.md](OPERATOR_POLICY.md) and
+`policy.example.toml` for the schema. Permissions cover exact executable/origin,
+capabilities, per-control grants, fallback enablement and bounded limits. Policy
+changes invalidate observations; changing rules during pending browser input
+stops that context. Polling bounds detection latency but is not an atomic
+transaction with browser-side or OS-side input.
 
 Do not infer consent from an LLM saying "the user approved". Real authorization must originate outside model-controlled context. For v0.1, keep risky or uncertain operations unsupported; a future release may add native trusted confirmation UI.
 

@@ -3,15 +3,20 @@
 A Python MCP server for local Windows computer control, built one small tool
 at a time. Requires Windows, Python 3.14+, and uv.
 
-Implemented: server status, computer information, resource usage, primary screen
-dimensions, mouse cursor position, monitor geometry, and opt-in screenshots as MCP tools.
-Allowed-window and active-window discovery are implemented; accessibility and
-input actions are planned.
+The prototype registers 21 tools: system/display information, allowed-window
+discovery, Windows UIA observation and actions, an isolated Chromium browser,
+target screenshots, and bounded input. Writes are disabled by default and need
+an operator-owned policy. This is an experimental local prototype.
+
+Real Chromium tests cover semantic actions and screenshots; disposable Windows
+fixture tests cover UIA observation, click/type, capture, stop and cancellation.
+Native physical input, mixed-DPI/multi-monitor scenarios and final hardening are
+still being validated. [Operator setup](docs/OPERATOR_POLICY.md) describes permissions.
 
 ## Tool roadmap
 
 These are the functions an MCP client can ask the server to run. We build and
-exercise one at a time. A planned row describes future work, not a working tool.
+exercise one at a time. Registration alone does not prove live desktop behavior.
 
 ### Working tools
 
@@ -27,9 +32,9 @@ exercise one at a time. A planned row describes future work, not a working tool.
 | `computer_list_targets()` | List locally allowed Windows application windows with opaque IDs | `src/tools/targets.py` |
 | `get_active_window()` | Identify the focused allowed target, or return null | `src/tools/targets.py` |
 
-### Planned tools, in suggested build order
+### Target-scoped tools implemented in the prototype
 
-| Order | Tool | What we need to build |
+| Order | Tool | Behavior |
 | --- | --- | --- |
 | 1 | `computer_observe()` | Read an allowed target's accessibility tree and issue element refs for one observation |
 | 2 | `focus_window()` | Bring an allowed window to the foreground and verify its identity |
@@ -45,20 +50,23 @@ exercise one at a time. A planned row describes future work, not a working tool.
 | 12 | `computer_wait()` | Wait for a bounded time or an expected state before observing again |
 
 `take_screenshot()` is our learning tool for the primary display.
-`computer_screenshot()` is the future target-specific version. Accessibility
+`computer_screenshot()` is the target-specific version. Accessibility
 operations come before physical mouse/keyboard fallback. Browser targets will
 reuse the observation and interaction tools through a browser adapter.
 
-Screenshot improvements are also planned: target/region capture, optional
+Screenshot improvements are implemented: target/region capture, optional
 downscaling, image-size metadata, and explicit image-to-desktop coordinate
 mapping. Resizing screenshots must not silently change how input coordinates
 are interpreted. Headless desktops, recording, installers, and cross-platform
 input are possible later projects, outside the current Windows v0.1 scope.
 
-### Planned features from the reference review
+### Features from the reference review
 
-None of these features is implemented yet. Each one adapts an idea from the
+These features have implementations under validation. Each adapts an idea from the
 [reference projects](#reference-projects) to this project's security contract.
+Screenshot maps support pointer movement and drag endpoints constrained to
+granted element bounds. Legacy controls support observation only. Native physical
+input still needs a successful live foreground-fixture acceptance run.
 
 | Feature | Used by | Requirements |
 | --- | --- | --- |
@@ -70,7 +78,7 @@ None of these features is implemented yet. Each one adapts an idea from the
 | Legacy control fallback | `computer_observe()` | Enumerate child controls with Win32 only when UIA cannot read them. Return them through normal element refs, without exposing window handles. |
 | Action guidance in tool descriptions | All interaction tools | Steer agents towards element-bound actions, using coordinates only as a last resort. |
 
-### Supporting functions we also need
+### Supporting modules
 
 These are internal Python helpers, not extra tools the agent can call directly.
 
@@ -316,7 +324,7 @@ The demo calls `computer_get_status()` first. Its result contains:
 - `desktop_supported`: whether this is a Windows process; interactive desktop access is not probed.
 - `available_tools`: the current registered tool names, including status itself.
 - `permissions.screenshots`: whether the local screenshot environment flag is exactly `1`.
-- `permissions.interaction`: always `false` until guarded input actions are implemented.
+- `permissions.interaction`: whether trusted local policy enables guarded input and automation is not stopped.
 
 The function reads no screen content or private system details. The SDK supplies
 its `ctx` argument internally; the client still calls it with `{}`. That context
@@ -354,7 +362,7 @@ status automatically includes them in its registered tool list.
 `computer_list_targets()` returns `target_id`, `name`, and `kind` for visible,
 titled windows from allowed executables. The default result is an empty list:
 no apps are allowed until the local operator configures them. Browser targets
-are not implemented; requesting `kind="browser"` returns `UNSUPPORTED`.
+are listed after `browser_open()` creates an approved, server-owned page.
 
 For a manual Notepad check, open Notepad first. Stop the running server, then
 run this command in the server terminal:
@@ -427,9 +435,27 @@ exits with a message asking you to start it.
 
 ## Next lessons
 
-Next, implement allowed target observation before input actions.
-Before adding actions, introduce permission checks, bounded coordinates, and a
-way to stop automation. Each tool should be understandable
-as an ordinary Python function before we connect it to an agent.
+Remaining work: complete native physical-input acceptance,
+mixed-DPI validation, CI execution, and the final
+security/readiness audit. Each tool should remain understandable as an ordinary
+Python function before connecting it to an agent.
+
+## Installed CLI and checks
+
+```powershell
+uv sync
+uv run computer-use-mcp --help
+uv run computer-use-mcp --config policy.example.toml
+uv run pytest -q
+uv run ruff check .
+uv build
+```
+
+`server.py` remains the root entry point. The installed `computer-use-mcp` command
+calls the same `cli()` function. No package has been published. Browser binaries
+require `uv run playwright install chromium` before browser tools are used.
+The existing lessons below describe the original nine tools; the additional
+modules are `src/core/{operator,observations,runtime,stop,audit}.py` and
+`src/backends/{accessibility,worker,browser,physical,banner,desktop_session}.py`.
 
 Reference: [official MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk).

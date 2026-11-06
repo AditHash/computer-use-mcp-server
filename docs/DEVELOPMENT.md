@@ -1,108 +1,77 @@
 # Development, Packaging, and Distribution
 
-## Platform
+The prototype targets Windows 10/11, Python 3.14+, PowerShell and uv. Browser
+and pure unit tests also run without native Windows APIs. No GPU or LLM service
+is required. Never use personal documents or authenticated browser profiles in tests.
 
-Initial development and live native automation: **Windows 10/11**, Python **3.12+**, PowerShell, uv. A GPU and LLM credentials are not required for the MCP server itself.
+## Setup and running
 
-## Bootstrap (for Codex to implement)
-
-~~~powershell
-winget install --id=astral-sh.uv -e
-
-# From repository root, once pyproject.toml is created:
-uv sync
+```powershell
+uv sync --locked
 uv run playwright install chromium
-uv run pytest
-uv run ruff check .
-uv run computer-use-mcp
-~~~
+uv run computer-use-mcp --help
+uv run server.py
+```
 
-Do not execute these commands expecting a working app yet: the repository currently contains **documentation only**.
+Plain startup uses stdio; stdout is reserved for MCP protocol messages and logs
+go to stderr. The installed command calls root `server:cli`. For the separately
+started demo server/client, use `uv run server.py --http`, then
+`uv run demo_client.py` in another terminal. HTTP is opt-in and loopback-only.
 
-If initializing locally, use **uv init --package** and adapt the generated metadata rather than creating a second nested project. The installed wheel must expose the console script **computer-use-mcp** from the package **computer_use_mcp**.
-
-## Proposed dependencies
-
-Runtime: mcp>=2,<3, pydantic, playwright>=1.64, pywinauto (Windows only), mss, pyautogui (opt-in fallback). Dev: pytest, pytest-asyncio, ruff. Codex must verify current compatible versions and pin/lock with uv, rather than treating these as a completed pyproject.toml.
-
-## MCP entry point and stdio
-
-The current MCP SDK uses:
-
-~~~python
-from mcp.server import MCPServer
-
-server = MCPServer("computer-use-mcp-server")
-
-@server.tool()
-def health_check() -> str:
-    return "ready"
-
-def main() -> None:
-    server.run(transport="stdio")
-~~~
-
-This is an API illustration, **not** shipped application code. Confirm tool discovery and transport against the installed SDK. On stdio, stdout is reserved for JSON-RPC messages: never print debug output or progress bars there. Log to stderr.
+Use `--config PATH` with a local copy of `policy.example.toml`. See
+[operator policy](OPERATOR_POLICY.md) for exact permissions and grants. Input,
+screenshots and browser navigation are disabled by default. No tool edits policy.
 
 ## Project organization
 
-~~~text
-src/computer_use_mcp/
-  server.py
-  core/{models,targets,refs,policy,dispatcher,errors}.py
-  backends/{base,windows_uia,windows_win32,browser}.py
-  fallback/{screenshots,input}.py
-  tools/{observation,interaction}.py
-tests/{unit,browser,windows}/
-docs/
-AGENTS.md
-README.md
-pyproject.toml
-uv.lock
-~~~
+Root `server.py` owns registration/startup and `demo_client.py` is the separate
+learning client. MCP handlers live in `src/tools/`; trusted policy, targets,
+observations and dispatch in `src/core/`; Windows and browser code in
+`src/backends/`. This intentionally preserves the user-requested root entry point
+and src modules rather than introducing a second server module.
 
-This layout is a starting convention; favor coherent boundaries over dogmatic folder creation. Don't create empty placeholder modules without functionality.
+The official MCP SDK v2 provides `MCPServer`. Browser code uses Playwright AI ARIA
+snapshots and server-wrapped refs. Native APIs are imported lazily on an owned
+COM worker. `pyproject.toml` declares runtime and development dependencies;
+`uv.lock` resolves them. Always use uv/the project interpreter rather than the
+machine's unrelated Python alpha installation.
 
-## Dependency and quality workflow
+## Checks and builds
 
-~~~powershell
-uv add "mcp[cli]" pydantic "playwright>=1.64" mss
-uv add --dev pytest pytest-asyncio ruff
-uv run playwright install chromium
+```powershell
 uv run pytest -q
 uv run ruff check .
 uv build
-~~~
+```
 
-Add pywinauto and PyAutoGUI using platform-appropriate markers or optional extras after testing on Windows. Keep uv.lock versioned. Avoid mixing pip installs into the uv environment.
+Browser tests use local fixtures and owned ephemeral Chromium contexts. Native
+integration is explicitly opt-in and uses `tests/fixtures/windows_app.py`, not
+Notepad. Run live native tests alone: concurrent commands or human focus changes
+can make physical-input checks abort. Exact commands and current evidence are in
+[TEST_PLAN.md](TEST_PLAN.md).
 
-## Developer testing rules
+The setuptools wheel includes root server.py and the src package. The console
+command is `computer-use-mcp`. Verify the installed wheel from outside the checkout
+using `tests/test_installed_cli.py`; do not infer package completeness from an
+import while the repository is the working directory. MANIFEST.in includes docs,
+the example policy, the demo client, and fixture sources in the source archive.
 
-- Unit tests run with fake adapters and do not depend on local windows.
-- Browser tests use a dedicated temporary context/profile and local fixture.
-- Windows tests are opt-in and run against a test account/VM.
-- CI should run unit/browser checks on supported runners and platform-gate Windows-specific code.
-- Credentials, cookies, screenshots, personal documents, and build artifacts must not be committed.
+The CI workflow runs unit/browser checks, Ruff, builds, and clean-environment
+installed-CLI acceptance on Windows and Ubuntu. Native UI tests remain manual;
+GitHub-hosted CI is not evidence for real interactive Windows behavior.
 
-## PyPI distribution (future)
+## Release checklist (no automatic publishing)
 
-PyPI is the package registry; **pip/uv are installers**. Once the package is ready, its wheel can be built via uv build and, with explicit user approval, published using uv publish with GitHub Actions Trusted Publishing.
+- Pass all applicable checks and document exact remaining platform limitations.
+- Verify stdio discovery and default-denied permissions from the installed wheel.
+- Review artifact contents; exclude private policy, images, logs and personal data.
+- Review tool schema changes against TOOL_CONTRACTS.md.
+- Obtain an explicit publishing request before TestPyPI/PyPI or a GitHub release.
 
-Potential consumer commands **after publication**:
+No package has been published by this workflow. uv build creates local artifacts
+only; CI has no publishing step or write permission.
 
-~~~powershell
-uvx computer-use-mcp-server
-uv tool install computer-use-mcp-server
-~~~
-
-Package name and entry-point name are separate; verify the PyPI project name is available before committing to it. Make the package clearly Windows-first in classifiers/documentation. Playwright's browser binaries may require a one-time setup command such as **uvx --from computer-use-mcp-server playwright install chromium** or a documented application bootstrap; validate the precise installed CLI experience before release.
-
-## Important upstream references
-
-- https://py.sdk.modelcontextprotocol.io/
-- https://github.com/modelcontextprotocol/python-sdk/blob/main/docs/whats-new.md
-- https://playwright.dev/python/docs/api/class-page
-- https://docs.astral.sh/uv/
-- https://pywinauto.readthedocs.io/
-
-Do not publish to main PyPI, run uncontrolled GUI actions, or modify a user's personal browser profile while merely setting up the development environment.
+Upstream references: [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk),
+[Playwright](https://playwright.dev/python/docs/api/class-page),
+[uv](https://docs.astral.sh/uv/),
+[setuptools configuration](https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html).

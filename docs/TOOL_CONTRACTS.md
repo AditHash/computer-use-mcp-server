@@ -1,7 +1,51 @@
-# Proposed MCP Tool Contracts (v0.1)
+# MCP Tool Contracts (v0.1 prototype)
 
-The target-scoped v0.1 API below remains a **design contract**. The current
-learning prototype implements the smaller tools described here first.
+The prototype registers the original nine learning tools and twelve target-scoped
+tools. Implementations remain experimental; live validation status is separate
+from registration. Local policy is documented in [OPERATOR_POLICY.md](OPERATOR_POLICY.md).
+
+## Current target-scoped signatures
+
+All IDs are opaque server-issued tokens. Every action uses one fresh snapshot.
+
+| Tool | Required inputs | Optional inputs |
+| --- | --- | --- |
+| computer_observe | target_id | max_depth=6 (1-10) |
+| focus_window | target_id, snapshot_id, ref | none |
+| computer_click | target_id, snapshot_id, ref | none |
+| computer_type | target_id, snapshot_id, ref, text | none; max 5,000 characters, subject to lower local limit |
+| computer_press_keys | target_id, snapshot_id, ref, keys | none; 1-10 allowed navigation keys |
+| computer_scroll | target_id, snapshot_id, ref, direction | amount=1 (1-10) |
+| browser_open | url | none |
+| computer_screenshot | target_id, snapshot_id | crop, max_dimension=1280 (64-1920) |
+| move_mouse | target_id, snapshot_id, map_id, x, y | duration=0.5 (0-1 second) |
+| computer_double_click | target_id, snapshot_id, ref | none |
+| computer_drag | target_id, snapshot_id, source_ref, destination_ref | duration=0.5 (0.1-1 second), image_points |
+| computer_wait | none | seconds=1 (0-10) |
+
+Observations return target_id, snapshot_id, kind, coordinate_space
+and elements with opaque refs. Each target keeps one active
+snapshot, expiring after 30 seconds. Re-observation, backend state change, action
+dispatch or effective policy change invalidates older refs. Protected labels are
+redacted; input values and backend locators are not returned.
+
+Actions return target_id, action, status (`verified` or `executed_unverified`) and
+observation_invalidated. A successful dispatch alone does not imply verified
+effects. Errors after dispatch can mean partial execution; observe before deciding
+on another action. Legacy Win32 refs support observation only.
+
+Target screenshots return an MCP text block containing metadata and an image/png
+block. Metadata includes map_id, target_id, snapshot_id, source/image dimensions,
+scale, coordinate_space and expiry. Crop coordinates are relative to the target
+capture. Maps expire with their snapshot; pointer movement validates map ownership,
+freshness and bounds. Native source coordinates are physical screen pixels;
+browser coordinates are CSS pixels. Captures are bounded to 16 megapixels and
+10 MiB PNG. Optional drag image_points contains map_id, source_x/source_y and
+destination_x/destination_y. Both mapped endpoints must lie within the granted
+source/destination elements, and fallback permission is required.
+
+The inventory and examples later in this document preserve the original design
+intent. The signatures in this section are authoritative for the current prototype.
 
 The same tool contracts are available over default stdio and opt-in loopback
 HTTP (`server.py --http`). The demo client uses HTTP to connect to the server
@@ -19,7 +63,7 @@ environment, independently of how the client was started.
 | computer_get_status | none | status, desktop_supported, available_tools, permissions | safe read-only status; no desktop grant required |
 | get_computer_info | none | os_name, os_release, os_version, architecture, cpu_model, cpu_logical_cores, cpu_physical_cores | read-only system facts |
 | get_computer_resources | none | cpu_percent, memory, system_disk | read-only system metrics |
-| computer_list_targets | optional kind=desktop/browser | list of target_id, name, kind; currently desktop only | local COMPUTER_USE_ALLOWED_APPS executable allowlist |
+| computer_list_targets | optional kind=desktop/browser | list of target_id, name, kind | local executable allowlist / owned browser pages with approved origins |
 | get_active_window | none | result containing target_id, name, kind or null | same local application discovery allowlist |
 
 `take_screenshot` captures the entire primary display in physical pixels. It
@@ -42,7 +86,9 @@ not test desktop access or invoke capture APIs. `desktop_supported` indicates
 Windows support. `available_tools` is read from the active MCP server registry.
 `permissions.screenshots` reflects whether the same local flag used by the
 screenshot tool is exactly `1`; it reports configuration, not backend readiness.
-`permissions.interaction` remains false. Status itself requires no desktop grant
+`permissions.interaction` reflects trusted policy and the emergency-stop latch.
+Additional flags report inspection, navigation, focus, fallback and target
+screenshots. Status itself requires no desktop grant
 and remains callable on unsupported platforms. No hostname, username, paths,
 environment dump, image data, or operating-system handles are returned. The SDK
 injects the handler's context; it is not a client-supplied argument.
@@ -62,8 +108,8 @@ client arguments. They expose no hostname, username, IP/MAC address, serial,
 process list, or file contents. Backend failures return BACKEND_UNAVAILABLE
 without internal error details. Neither tool performs a write or issues refs.
 
-`computer_list_targets` supports omitted kind or desktop. Browser kind returns
-UNSUPPORTED until a managed browser backend exists. With no local allowlist it
+`computer_list_targets` supports omitted kind, desktop or browser. Managed browser
+targets are listed after opening approved pages. With no local application allowlist it
 returns an empty list without enumerating windows. The allowlist is a JSON
 array of at most 32 absolute Windows `.exe` paths in COMPUTER_USE_ALLOWED_APPS;
 comparisons normalize case and separators. Malformed policy fails closed with
@@ -94,10 +140,9 @@ is `{result: target-or-null}`. No raw handle, PID, or executable path is returne
 Expired registry entries cannot be matched. This has the same discovery-only
 identity limitations as target listing and does not authorize any action.
 
-No current tool issues element refs, so element stale-ref checks do not yet
-apply. Target identity expiry/replacement and permission revocation are tested.
-The prototype has a discovery registry, but target-specific observation and
-action authorization are not implemented. Enabling the existing screenshot
+Target identity expiry/replacement, element ref freshness and permission
+revocation are tested. Target-specific observation and action authorization
+use the local policy and snapshot registry. Enabling the legacy screenshot
 tool still authorizes the whole primary display for that server process; it is
 separate from both this allowlist and the planned `computer_screenshot` API.
 
@@ -116,11 +161,11 @@ separate from both this allowlist and the planned `computer_screenshot` API.
 | --- | --- | --- | --- |
 | computer_list_targets | optional kind=desktop/browser | opaque target IDs, names, kinds | inspect |
 | computer_observe | target_id, optional max_depth | snapshot_id, accessibility text/tree, refs | inspect |
-| computer_screenshot | target_id, optional crop | MCP image content + metadata, never local secret file paths | screenshot |
+| computer_screenshot | target_id, snapshot_id, optional crop/max_dimension | MCP image content + metadata, never local secret file paths | screenshot |
 | computer_click | target_id, snapshot_id, ref | action result | interact |
 | computer_type | target_id, snapshot_id, ref, text | action result | interact |
-| computer_press_keys | target_id, keys | action result | interact |
-| computer_scroll | target_id, snapshot_id, optional ref, direction, amount | action result | interact |
+| computer_press_keys | target_id, snapshot_id, ref, keys | action result | interact |
+| computer_scroll | target_id, snapshot_id, ref, direction, amount | action result | interact |
 | browser_open | approved URL or approved page creation parameters | managed browser target_id | navigate |
 | computer_get_status | no input | health + safe capabilities; no sensitive environment data | inspect |
 
@@ -186,11 +231,12 @@ Do not include full traces or sensitive OS paths in tool responses; send redacte
 
 ## Versioning
 
-### Additional planned primitives
+### Additional primitives
 
-The README reference review adds planned element-bound double-click and drag,
-plus a bounded wait tool. They are not registered or implemented yet. Screenshot
-downscaling will require explicit source/image dimensions and coordinate
-mapping, with freshness and target checks before any physical-input fallback.
+The README reference review adds element-bound double-click and drag,
+plus a bounded wait tool, all registered in the prototype. Screenshot
+downscaling provides explicit source/image dimensions and coordinate
+mapping, with freshness and target checks before physical-input fallback.
+Mapped drag endpoints are implemented; full live physical-input acceptance remains unfinished.
 
 Stabilize schemas before the first PyPI release. Any breaking tool-name or response change requires contract tests, README updates, and a documented release note.

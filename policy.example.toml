@@ -1,0 +1,31 @@
+# Copy locally and pass --config PATH. MCP callers cannot change these rules.
+# Defaults allow inspection only of explicitly listed targets, and no input.
+[permissions]
+inspect = true
+screenshot = false
+interact = false
+navigate = false
+focus = false
+fallback = false
+
+[limits]
+timeout_seconds = 5.0
+max_depth = 6
+max_elements = 200
+max_text_length = 2000
+
+[desktop]
+allowed_apps = [] # Exact absolute .exe paths, e.g. 'C:\TestApp\fixture.exe'.
+
+[browser]
+allowed_origins = [] # Exact origins, e.g. 'http://127.0.0.1:8765'.
+headless = true
+
+# Add narrow grants only for controls in a disposable, trusted test application.
+# Enable interact separately. Native focus/physical input need focus permission;
+# double-click, drag and screenshot-coordinate movement also need fallback.
+# [[grants]]
+# target = 'http://127.0.0.1:8765'
+# role = 'button'
+# name = 'Increment'
+# actions = ['click']
