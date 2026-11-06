@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools==84.2.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "computer-use-mcp-server"
 version = "0.1.0"
@@ -7,6 +11,39 @@ requires-python = ">=3.14"
 dependencies = [
     "mcp>=2,<3",
     "mss>=10.2.0",
+    "pillow>=13.0.0",
+    "playwright>=1.64",
     "psutil>=7.2.2",
+    "pyautogui>=0.9.54 ; sys_platform == 'win32'",
+    "pydantic>=2.14.2",
     "pywin32>=312 ; sys_platform == 'win32'",
+    "pywinauto>=0.6.9 ; sys_platform == 'win32'",
+]
+
+[project.scripts]
+computer-use-mcp = "server:cli"
+
+# Keep the operator-facing entry point at the root and implementation in src/.
+[tool.setuptools]
+py-modules = ["server"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src", "src.*"]
+namespaces = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "browser: uses a server-owned Chromium instance against a local fixture",
+    "windows: requires a controlled interactive Windows desktop fixture",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1.post1",
+    "ruff>=0.17.3",
 ]
