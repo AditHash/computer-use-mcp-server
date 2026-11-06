@@ -1,0 +1,17 @@
+<!doctype html><html><head><title>MCP fixture</title></head><body>
+<h1>Controlled MCP fixture</h1>
+<button id="increment" onclick="document.getElementById('count').textContent=String(++window.counter)">Increment</button>
+<span id="count" role="status">0</span>
+<label>Name <input id="name" aria-label="Name"></label>
+<div id="notes" role="textbox" aria-label="Notes" contenteditable="true">Initial notes</div>
+<label>Password <input type="password" value="fixture-private-value" aria-label="Password"></label>
+<button>Delete everything</button>
+<div role="region" aria-label="Scrollable area" style="height:80px;overflow:auto"><div style="height:1000px">Scroll fixture</div></div>
+<div id="drag_source" role="button" aria-label="Drag source" draggable="true"
+  ondragstart="event.dataTransfer.setData('text/plain','fixture')" style="width:100px;height:40px;background:#ddd">Drag source</div>
+<div id="drop_target" role="button" aria-label="Drop zone" ondragover="event.preventDefault()"
+  ondrop="event.preventDefault();document.getElementById('drop_state').textContent='dropped'"
+  style="width:120px;height:60px;background:#afa">Drop zone</div>
+<span id="drop_state" role="status">not dropped</span>
+<script>window.counter=0;window.lastPointer=null;document.addEventListener('mousemove',e=>window.lastPointer=[e.clientX,e.clientY]);</script>
+</body></html>
