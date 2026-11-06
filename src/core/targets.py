@@ -2,9 +2,10 @@
 
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from threading import Lock
-from typing import Callable, Literal, TypedDict
+from typing import Literal, TypedDict
 
 from .policy import normalize_executable
 
@@ -27,7 +28,7 @@ class WindowRecord:
 class TargetInfo(TypedDict):
     target_id: str
     name: str
-    kind: Literal["desktop"]
+    kind: Literal["desktop", "browser"]
 
 
 class TargetRegistry:
@@ -40,6 +41,7 @@ class TargetRegistry:
     def __init__(self, clock: Callable[[], float] = time.monotonic):
         self._clock = clock
         self._entries: dict[tuple[int, int, float, str, str], tuple[str, float]] = {}
+        self._records: dict[str, WindowRecord] = {}
         self._lock = Lock()
 
     def refresh(self, windows: list[WindowRecord], allowed: frozenset[str]) -> list[TargetInfo]:
@@ -47,6 +49,7 @@ class TargetRegistry:
             now = self._clock()
             current: dict[tuple[int, int, float, str, str], tuple[str, float]] = {}
             result: list[TargetInfo] = []
+            records = {}
             for window in windows:
                 if len(result) >= 100:
                     break
@@ -58,9 +61,24 @@ class TargetRegistry:
                 prior = self._entries.get(identity)
                 target_id = prior[0] if prior and prior[1] > now else "t_" + uuid.uuid4().hex
                 current[identity] = (target_id, now + 60.0)
+                records[target_id] = window
                 result.append({"target_id": target_id, "name": window.title[:200], "kind": "desktop"})
             self._entries = current
+            self._records = records
             return result
+
+    def resolve(self, target_id: str, allowed: frozenset[str]) -> WindowRecord:
+        from .errors import ComputerError
+        with self._lock:
+            record = self._records.get(target_id)
+            if record is None:
+                raise ComputerError('TARGET_NOT_FOUND', 'List targets again; this ID is unknown or closed.')
+            if normalize_executable(record.executable) not in allowed:
+                raise ComputerError('TARGET_NOT_ALLOWED', 'The application is no longer allowed.')
+            entry = self._entries.get(record.identity)
+            if entry is None or entry[1] <= self._clock():
+                raise ComputerError('TARGET_NOT_FOUND', 'The target ID expired; list targets again.')
+            return record
 
     def target_id_for_handle(self, handle: int) -> str | None:
         """Match a foreground handle against the freshly discovered registry."""

@@ -7,6 +7,8 @@ import psutil
 from src.core.policy import normalize_executable
 from src.core.targets import WindowRecord
 
+from .desktop_session import require_interactive_session
+
 
 class UnsupportedPlatformError(Exception):
     pass
@@ -20,6 +22,7 @@ def foreground_window_handle() -> int:
     """Read the foreground handle for internal matching; never expose it to MCP."""
     if sys.platform != "win32":
         raise UnsupportedPlatformError
+    require_interactive_session()
     try:
         import pywintypes
         import win32gui
@@ -35,6 +38,7 @@ def discover_windows(allowed: frozenset[str]) -> list[WindowRecord]:
     """Enumerate visible, titled windows from explicitly allowed executables."""
     if sys.platform != "win32":
         raise UnsupportedPlatformError
+    require_interactive_session()
 
     # Discovery uses Win32 metadata, not UIA or COM. Import only on Windows.
     try:
