@@ -21,8 +21,10 @@ class StatusTests(unittest.IsolatedAsyncioTestCase):
             data = result.structured_content
             self.assertEqual(data["status"], "ready")
             self.assertEqual(data["available_tools"], [tool.name for tool in tools.tools])
-            self.assertEqual(data["permissions"], {"screenshots": False, "interaction": False})
-            self.assertEqual(set(data), {"status", "desktop_supported", "available_tools", "permissions"})
+            self.assertEqual(data["permissions"], {"screenshots": False, "interaction": False,
+                "target_screenshots": False, "inspection": True, "navigation": False, "focus": False, "fallback": False})
+            self.assertFalse(data['automation_stopped'])
+            self.assertEqual(set(data), {"status", "automation_stopped", "desktop_supported", "available_tools", "permissions"})
 
     async def test_status_tracks_screenshot_permission_without_capturing(self):
         with patch('src.tools.screenshot.MSS') as capture:

@@ -9,6 +9,8 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mss import MSS, ScreenShotError
 from mss.tools import to_png
 
+from src.backends.desktop_session import require_interactive_session
+
 logger = logging.getLogger(__name__)
 
 MAX_PIXELS = 16_000_000
@@ -26,6 +28,9 @@ def take_screenshot() -> Image:
         raise ToolError("PERMISSION_DENIED: Screenshots are disabled by the local operator.")
     if sys.platform != "win32":
         raise ToolError("UNSUPPORTED: Screenshots currently support Windows only.")
+    from src.core.runtime import get_runtime
+    get_runtime().stop.check()
+    require_interactive_session()
 
     logger.info("Capturing the primary display")
     try:

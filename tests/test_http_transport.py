@@ -65,7 +65,7 @@ class HTTPTransportTests(unittest.TestCase):
                 demo = subprocess.run(
                     [sys.executable, '-c', f'import asyncio; from demo_client import main; asyncio.run(main(server_url={url!r}))'],
                     cwd=root, env=client_environment, capture_output=True,
-                    text=True, encoding='utf-8', timeout=20,
+                    text=True, encoding='utf-8', timeout=20, check=False,
                 )
                 self.assertEqual(demo.returncode, 0, demo.stderr)
                 self.assertIn("computer_get_status: {'status': 'ready'", demo.stdout)

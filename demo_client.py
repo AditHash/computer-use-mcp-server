@@ -64,6 +64,6 @@ if __name__ == "__main__":
         asyncio.run(main(include_screenshot=args.screenshot))
     except KeyboardInterrupt:
         logger.info("Demo client interrupted")
-    except Exception:
+    except Exception:  # noqa: BLE001 - CLI boundary: report failure without exposing protocol payloads.
         logger.error("Demo failed. Start 'uv run server.py --http' in another terminal and check its logs.")
         raise SystemExit(1) from None

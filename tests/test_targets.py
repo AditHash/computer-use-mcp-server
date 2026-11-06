@@ -12,7 +12,11 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from server import mcp
 from src.backends import windows as windows_backend
-from src.core.policy import allowed_applications, configure_allowed_applications, normalize_executable
+from src.core.policy import (
+    allowed_applications,
+    configure_allowed_applications,
+    normalize_executable,
+)
 from src.core.targets import TargetRegistry, WindowRecord
 from src.tools import targets
 
@@ -31,9 +35,8 @@ class PolicyTests(unittest.TestCase):
 
     def test_invalid_policy_never_grants_access(self):
         for value in ('not-json', '"notepad.exe"', '["notepad.exe"]', '["*"]', '[42]'):
-            with self.subTest(value=value), patch.dict(os.environ, {'COMPUTER_USE_ALLOWED_APPS': value}):
-                with self.assertRaisesRegex(ToolError, 'INVALID_ARGUMENT'):
-                    allowed_applications()
+            with self.subTest(value=value), patch.dict(os.environ, {'COMPUTER_USE_ALLOWED_APPS': value}), self.assertRaisesRegex(ToolError, 'INVALID_ARGUMENT'):
+                allowed_applications()
 
     def test_startup_resolves_a_running_app_to_an_exact_path(self):
         process = SimpleNamespace(info={'name': 'Notepad.exe', 'exe': APP})
@@ -112,9 +115,8 @@ class DiscoveryTests(unittest.TestCase):
             self.assertEqual(targets.computer_list_targets(), [])
         discover.assert_not_called()
 
-    def test_browser_backend_is_explicitly_unavailable(self):
-        with self.assertRaisesRegex(ToolError, 'UNSUPPORTED'):
-            targets.computer_list_targets(kind='browser')
+    def test_browser_targets_are_empty_until_a_managed_page_is_opened(self):
+        self.assertEqual(targets.computer_list_targets(kind='browser'), [])
 
     def test_policy_revocation_is_checked_before_returning_results(self):
         with patch.object(targets, 'allowed_applications', side_effect=[ALLOWED, frozenset()]), patch.object(targets, 'discover_windows', return_value=[WINDOW]):
@@ -169,6 +171,10 @@ class TargetsMCPTests(unittest.IsolatedAsyncioTestCase):
 
 
 class WindowsBackendTests(unittest.TestCase):
+    def setUp(self):
+        session = patch.object(windows_backend, 'require_interactive_session')
+        session.start()
+        self.addCleanup(session.stop)
     def test_unapproved_titles_are_not_read(self):
         from unittest.mock import Mock
 

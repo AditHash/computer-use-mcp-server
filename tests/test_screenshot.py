@@ -7,8 +7,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from mcp.server.mcpserver.exceptions import ToolError
 from mcp import Client
+from mcp.server.mcpserver.exceptions import ToolError
 
 from server import mcp
 from src.tools import screenshot
@@ -16,6 +16,9 @@ from src.tools import screenshot
 
 class ScreenshotTests(unittest.TestCase):
     def setUp(self):
+        session = patch.object(screenshot, 'require_interactive_session')
+        session.start()
+        self.addCleanup(session.stop)
         self.environment = patch.dict(os.environ, {"COMPUTER_USE_ALLOW_SCREENSHOTS": "1"})
         self.environment.start()
         self.addCleanup(self.environment.stop)
@@ -35,9 +38,8 @@ class ScreenshotTests(unittest.TestCase):
         for setting in ("", "0", "true"):
             with self.subTest(setting=setting), patch.dict(
                 os.environ, {"COMPUTER_USE_ALLOW_SCREENSHOTS": setting}
-            ):
-                with self.assertRaisesRegex(ToolError, "PERMISSION_DENIED"):
-                    screenshot.take_screenshot()
+            ), self.assertRaisesRegex(ToolError, "PERMISSION_DENIED"):
+                screenshot.take_screenshot()
         self.capture_factory.assert_not_called()
 
     def test_returns_png_image_without_logging_pixels(self):
@@ -56,9 +58,8 @@ class ScreenshotTests(unittest.TestCase):
         self.capture.grab.assert_not_called()
 
     def test_rejects_oversized_encoded_result(self):
-        with patch.object(screenshot, "MAX_PNG_BYTES", 1):
-            with self.assertRaisesRegex(ToolError, "OUT_OF_BOUNDS"):
-                screenshot.take_screenshot()
+        with patch.object(screenshot, "MAX_PNG_BYTES", 1), self.assertRaisesRegex(ToolError, "OUT_OF_BOUNDS"):
+            screenshot.take_screenshot()
 
     def test_capture_failure_hides_backend_details(self):
         self.capture.grab.side_effect = screenshot.ScreenShotError("private backend details")
@@ -67,13 +68,16 @@ class ScreenshotTests(unittest.TestCase):
         self.assertNotIn("private backend details", str(error.exception))
 
     def test_non_windows_is_explicitly_unsupported(self):
-        with patch.object(screenshot.sys, "platform", "linux"):
-            with self.assertRaisesRegex(ToolError, "UNSUPPORTED"):
-                screenshot.take_screenshot()
+        with patch.object(screenshot.sys, "platform", "linux"), self.assertRaisesRegex(ToolError, "UNSUPPORTED"):
+            screenshot.take_screenshot()
         self.capture_factory.assert_not_called()
 
 
 class ScreenshotMCPTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        session = patch.object(screenshot, 'require_interactive_session')
+        session.start()
+        self.addCleanup(session.stop)
     async def test_permission_denial_is_an_mcp_error_without_capture(self):
         with patch.dict(os.environ, {"COMPUTER_USE_ALLOW_SCREENSHOTS": "0"}), patch.object(screenshot, "MSS") as capture:
             async with Client(mcp) as client:

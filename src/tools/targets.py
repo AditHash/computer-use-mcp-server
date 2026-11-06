@@ -6,8 +6,10 @@ from typing import Literal
 from mcp.server.mcpserver.exceptions import ToolError
 
 from src.backends.windows import (
-    BackendUnavailableError, UnsupportedPlatformError,
-    discover_windows, foreground_window_handle,
+    BackendUnavailableError,
+    UnsupportedPlatformError,
+    discover_windows,
+    foreground_window_handle,
 )
 from src.core.policy import allowed_applications
 from src.core.targets import TargetInfo, TargetRegistry
@@ -16,24 +18,35 @@ logger = logging.getLogger(__name__)
 registry = TargetRegistry()
 
 
+def effective_applications():
+    from src.core.runtime import get_runtime
+    policy = get_runtime().source.load()
+    if not policy.permissions.inspect:
+        return frozenset()
+    return allowed_applications() | frozenset(policy.desktop.allowed_apps)
+
+
 def computer_list_targets(kind: Literal["desktop", "browser"] | None = None) -> list[TargetInfo]:
     """List allowed Windows application windows as opaque target IDs and names.
 
     The local operator configures COMPUTER_USE_ALLOWED_APPS as a JSON array
-    of full executable paths. No allowed apps means no targets. Browser target
-    discovery is not implemented. This tool does not focus or control windows.
+    of full executable paths, or uses a trusted local policy. Managed browser
+    pages are listed after approved browser_open calls. This tool does not focus
+    or control windows.
     """
-    if kind == "browser":
-        raise ToolError("UNSUPPORTED: Managed browser targets are not implemented yet.")
+    from src.core.runtime import get_runtime
+    browser = get_runtime().browser_targets()
+    if kind == 'browser':
+        return browser
     logger.info("Discovering allowed desktop targets")
     try:
-        allowed = allowed_applications()
+        allowed = effective_applications()
         if not allowed:
             logger.info("No applications allowed for target discovery")
-            return registry.refresh([], frozenset())
+            return registry.refresh([], frozenset()) + (browser if kind is None else [])
         windows = discover_windows(allowed)
         # Recheck local permission before exposing any window names.
-        result = registry.refresh(windows, allowed_applications())
+        result = registry.refresh(windows, effective_applications())
     except UnsupportedPlatformError:
         registry.refresh([], frozenset())
         raise ToolError("UNSUPPORTED: Desktop discovery currently supports Windows only.") from None
@@ -46,7 +59,7 @@ def computer_list_targets(kind: Literal["desktop", "browser"] | None = None) -> 
         raise
 
     logger.info("Discovered %d allowed desktop targets", len(result))
-    return result
+    return result + (browser if kind is None else [])
 
 
 def get_active_window() -> TargetInfo | None:
@@ -56,7 +69,7 @@ def get_active_window() -> TargetInfo | None:
     never identified. Focus changes during the query return null.
     """
     logger.info("Reading the active allowed window")
-    allowed = allowed_applications()
+    allowed = effective_applications()
     if not allowed:
         logger.info("No active window disclosed: no applications allowed")
         return None
@@ -65,7 +78,7 @@ def get_active_window() -> TargetInfo | None:
         if not before:
             return None
         listed = computer_list_targets(kind="desktop")
-        if before != foreground_window_handle() or allowed_applications() != allowed:
+        if before != foreground_window_handle() or effective_applications() != allowed:
             logger.info("Active window changed during discovery")
             return None
         target_id = registry.target_id_for_handle(before)
